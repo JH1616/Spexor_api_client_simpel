@@ -103,7 +103,11 @@ class Spexor():
                     diver1 = spexor
                     diver2 = s
                     for i in tree:
-                        diver1 = diver1[i]
+                        if i in diver1:
+                            diver1 = diver1[i]
+                        else:
+                            diver1.update({i: {}})
+                            diver1 = diver1[i]
                         diver2 = diver2[i]
 
                     diver1.update(diver2)
@@ -128,26 +132,29 @@ class Spexor():
     def refresh_spexor_status(self, SpexorID=None):
         #curl --location --request GET 'https://api.spexor-bosch.com/api/public/v1/spexor/XXXXXXX' \
         # --header 'Authorization: Bearer XXXXXXX.....XXXXXX'
+        if SpexorID is None:
+            SpexorID = self.all_spexors
+
         response = []
-        if SpexorID is not None:
-            response.append(requests.get(baseURL+f'/api/public/v1/spexor/{SpexorID}', headers=self.get_header()).json())
-        else:
-            for spexor in self.all_spexors:
-                response.append(requests.get(baseURL+f'/api/public/v1/spexor/{spexor["id"]}', headers=self.get_header()).json())
+        for spexor in SpexorID:
+            response_single = requests.get(baseURL+f'/api/public/v1/spexor/{spexor["id"]}', headers=self.get_header()).json()
+            response_single['status']['observation'] = {obs['observationType']:[obs,obs.pop('observationType')][0] for obs in response_single['status']['observation']}
+            response.append(response_single)
+        
         self.__update_all_spexors__(response)
         return self.all_spexors
     
     def refresh_spexor_sensors(self, SpexorID=None):
         #curl --location --request GET 'https://api.spexor-bosch.com/api/public/v1/spexor/862430053823346/sensor?keys=AirQuality,AirQualityLevel,Temperature,Pressure,Acceleration,Light,Gas,Humidity,Microphone,PassiveInfrared,Fire' \
         # --header 'Authorization: Bearer XXXXXXX.....XXXXXX'
+        if SpexorID is None:
+            SpexorID = self.all_spexors
+
         urlattachment = 'sensor?keys=AirQuality,AirQualityLevel,Temperature,Pressure,Acceleration,Light,Gas,Humidity,Microphone,PassiveInfrared,Fire'
 
         response = []
-        if SpexorID is not None:
-            response.append({'id':SpexorID, 'sensors_status': requests.get(baseURL+f'/api/public/v1/spexor/{SpexorID}/{urlattachment}', headers=self.get_header()).json()})
-        else:
-            for spexor in self.all_spexors:
-                response.append({'id':spexor["id"], 'sensors_status':requests.get(baseURL+f'/api/public/v1/spexor/{spexor["id"]}/{urlattachment}', headers=self.get_header()).json()})
+        for spexor in SpexorID:
+            response.append({'id':spexor["id"], 'sensors_status':{sensor['key']:[sensor,sensor.pop('key')][0] for sensor in requests.get(baseURL+f'/api/public/v1/spexor/{spexor["id"]}/{urlattachment}', headers=self.get_header()).json()}})
         self.__update_all_spexors__(response)
         return self.all_spexors
     
@@ -164,16 +171,19 @@ class Spexor():
         # --header 'Authorization: Bearer XXXXXXX.....XXXXXX'
         #-H 'Content-Type: application/json' \
         #-d '[{"observationType":"Burglary","sensorMode":"Activated"}]'
+        if SpexorID is None:
+            SpexorID = self.all_spexors
+
         header = self.get_header()
         header.update({'Content-Type':'application/json'})
         data = [{"observationType":observationType,"sensorMode":targetState}]
 
         response = []
-        if SpexorID is not None:
-            response.append({'id':SpexorID, "status":{'observation':requests.patch(baseURL+f'/api/public/v1/spexor/{SpexorID}/status/observation', data=json.dumps(data), headers=header).json()}})
-        else:
-            for spexor in self.all_spexors:
-                response.append({'id':spexor["id"], "status":{'observation':requests.patch(baseURL+f'/api/public/v1/spexor/{spexor["id"]}/status/observation', data=json.dumps(data), headers=header).json()}})
+        for spexor in self.all_spexors:
+            response_single = requests.patch(baseURL+f'/api/public/v1/spexor/{spexor["id"]}/status/observation', data=json.dumps(data), headers=header).json()
+            response_single = {obs['observationType']:[obs,obs.pop('observationType')][0] for obs in response_single}
+            response.append({'id':spexor["id"], "status":{'observation':response_single}})
+        print_pretty(response)
         self.__update_all_spexors__(response, ['status'])
         return self.all_spexors
     
@@ -240,6 +250,7 @@ if __name__ == "__main__":
     print_pretty(s.refresh_all())
     #print_pretty(s.change_observation_state('Burglary', 'Deactivated'))
     #print_pretty(s.change_observation_state('Burglary', 'Activated'))
+    #print_pretty(s.refresh_all())
 
     #print_pretty(s.get_webhook_event_hist('ef66822b-ac15-4044-ab69-edb682971fbb'))
     #print_pretty(s.delete_webhook('aca3e80a-4d90-4d28-b8c3-a69e6b3de9f9'))
